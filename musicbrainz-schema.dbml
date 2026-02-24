@@ -1,0 +1,271 @@
+// MusicBrainz Schema — pipeline-relevant tables
+// Docs: https://dbml.dbdiagram.io/docs
+// Paste into https://dbdiagram.io to visualize
+
+// ── Core recording chain ──────────────────────────────────────────────────────
+
+Table isrc {
+  id integer [primary key]
+  isrc varchar [not null, note: 'The ISRC code e.g. USRC17607839']
+  recording integer [not null, ref: > recording.id]
+  source smallint
+  edits_pending integer
+  created timestamp
+}
+
+Table recording {
+  id integer [primary key]
+  gid uuid [not null, note: 'Public MBID']
+  name varchar [not null]
+  artist_credit integer [not null, ref: > artist_credit.id]
+  length integer [note: 'Duration in milliseconds']
+  comment varchar [note: 'Disambiguation e.g. "live version"']
+  edits_pending integer
+  last_updated timestamp
+  video boolean
+}
+
+Table recording_first_release_date {
+  recording integer [primary key, ref: - recording.id]
+  year smallint
+  month smallint
+  day smallint
+  note: 'Denormalized convenience table — earliest known release date for a recording'
+}
+
+// ── Artist chain ──────────────────────────────────────────────────────────────
+
+Table artist_credit {
+  id integer [primary key]
+  name varchar [not null, note: 'The credited name as it appears on the release']
+  artist_count smallint
+  ref_count integer
+  created timestamp
+  edits_pending integer
+  gid uuid
+}
+
+Table artist_credit_name {
+  artist_credit integer [not null, ref: > artist_credit.id]
+  position smallint [not null]
+  artist integer [not null, ref: > artist.id]
+  name varchar [not null]
+  join_phrase varchar
+}
+
+Table artist {
+  id integer [primary key]
+  gid uuid [not null, note: 'Public MBID']
+  name varchar [not null]
+  sort_name varchar [not null]
+  begin_date_year smallint
+  begin_date_month smallint
+  begin_date_day smallint
+  end_date_year smallint
+  end_date_month smallint
+  end_date_day smallint
+  type integer [ref: > artist_type.id]
+  area integer
+  gender integer
+  comment varchar
+  edits_pending integer
+  last_updated timestamp
+  ended boolean
+  begin_area integer
+  end_area integer
+}
+
+Table artist_type {
+  id integer [primary key]
+  name varchar [not null, note: 'Person / Group / Orchestra / Choir / Character / Other']
+  parent integer
+  child_order integer
+  description varchar
+  gid uuid
+}
+
+// ── Release chain ─────────────────────────────────────────────────────────────
+
+Table track {
+  id integer [primary key]
+  gid uuid [not null]
+  recording integer [not null, ref: > recording.id]
+  medium integer [not null, ref: > medium.id]
+  position integer [not null]
+  number varchar [not null]
+  name varchar [not null, note: 'Track title as printed — may differ from recording.name']
+  artist_credit integer [not null, ref: > artist_credit.id]
+  length integer
+  edits_pending integer
+  last_updated timestamp
+  is_data_track boolean
+}
+
+Table medium {
+  id integer [primary key]
+  release integer [not null, ref: > release.id]
+  position integer [not null]
+  format integer [ref: > medium_format.id]
+  name varchar
+  edits_pending integer
+  last_updated timestamp
+  track_count integer
+}
+
+Table medium_format {
+  id integer [primary key]
+  name varchar [not null, note: 'CD / Vinyl / Digital Media / Cassette / etc.']
+  parent integer
+  child_order integer
+  year smallint
+  has_discids boolean
+  description varchar
+  gid uuid
+}
+
+Table release {
+  id integer [primary key]
+  gid uuid [not null, note: 'Public MBID']
+  name varchar [not null]
+  artist_credit integer [not null, ref: > artist_credit.id]
+  release_group integer [not null, ref: > release_group.id]
+  status integer [ref: > release_status.id]
+  packaging integer
+  language integer
+  script integer
+  barcode varchar
+  comment varchar
+  edits_pending integer
+  last_updated timestamp
+  quality smallint
+}
+
+Table release_status {
+  id integer [primary key]
+  name varchar [not null, note: 'Official / Bootleg / Promotion / Pseudo-Release / Withdrawn / Cancelled']
+  parent integer
+  child_order integer
+  description varchar
+  gid uuid
+}
+
+Table release_group {
+  id integer [primary key]
+  gid uuid [not null, note: 'Public MBID']
+  name varchar [not null]
+  artist_credit integer [not null, ref: > artist_credit.id]
+  type integer [ref: > release_group_primary_type.id]
+  comment varchar
+  edits_pending integer
+  last_updated timestamp
+}
+
+Table release_group_primary_type {
+  id integer [primary key]
+  name varchar [not null, note: 'Album / Single / EP / Broadcast / Other']
+  parent integer
+  child_order integer
+  description varchar
+  gid uuid
+}
+
+// ── Label chain ───────────────────────────────────────────────────────────────
+
+Table release_label {
+  id integer [primary key]
+  release integer [not null, ref: > release.id]
+  label integer [ref: > label.id]
+  catalog_number varchar
+  last_updated timestamp
+}
+
+Table label {
+  id integer [primary key]
+  gid uuid [not null, note: 'Public MBID']
+  name varchar [not null]
+  sort_name varchar
+  begin_date_year smallint
+  begin_date_month smallint
+  begin_date_day smallint
+  end_date_year smallint
+  end_date_month smallint
+  end_date_day smallint
+  label_code integer
+  type integer
+  area integer
+  comment varchar
+  edits_pending integer
+  last_updated timestamp
+  ended boolean
+}
+
+// ── Tags / genres ─────────────────────────────────────────────────────────────
+
+Table recording_tag {
+  recording integer [not null, ref: > recording.id]
+  tag integer [not null, ref: > tag.id]
+  count integer [not null, note: 'Vote count — higher = more community confidence']
+  last_updated timestamp
+}
+
+Table tag {
+  id integer [primary key]
+  name varchar [not null]
+  ref_count integer
+}
+
+// ── External URLs (Wikipedia, Wikidata, Spotify, etc.) ────────────────────────
+
+Table l_recording_url {
+  id integer [primary key]
+  link integer [not null, ref: > link.id]
+  entity0 integer [not null, ref: > recording.id]
+  entity1 integer [not null, ref: > url.id]
+  edits_pending integer
+  last_updated timestamp
+  link_order integer
+  entity0_credit varchar
+  entity1_credit varchar
+}
+
+Table url {
+  id integer [primary key]
+  gid uuid [not null]
+  url varchar [not null, note: 'The actual URL e.g. https://en.wikipedia.org/wiki/Classy_101']
+  edits_pending integer
+  last_updated timestamp
+}
+
+Table link {
+  id integer [primary key]
+  link_type integer [not null, ref: > link_type.id]
+  begin_date_year smallint
+  begin_date_month smallint
+  begin_date_day smallint
+  end_date_year smallint
+  end_date_month smallint
+  end_date_day smallint
+  attribute_count integer
+  created timestamp
+  ended boolean
+}
+
+Table link_type {
+  id integer [primary key]
+  name varchar [not null, note: 'wikipedia / wikidata / streaming / lyrics / etc.']
+  gtype0 varchar [not null]
+  gtype1 varchar [not null]
+  parent integer
+  child_order integer
+  description varchar
+  link_phrase varchar
+  reverse_link_phrase varchar
+  long_link_phrase varchar
+  priority integer
+  last_updated timestamp
+  is_deprecated boolean
+  has_dates boolean
+  entity0_cardinality integer
+  entity1_cardinality integer
+  gid uuid
+}
